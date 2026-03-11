@@ -1,12 +1,14 @@
 """ImageViewer widget — displays an image with ROI selection, match overlays, zoom and pan."""
 
-from PySide6.QtCore import Qt, QRect, QPoint, QPointF, QRectF
+from PySide6.QtCore import Qt, QRect, QPoint, QPointF, QRectF, Signal
 from PySide6.QtGui import QPixmap, QPainter, QPen, QBrush, QCursor
 from PySide6.QtWidgets import QWidget, QScrollArea
 
 
 class ImageViewer(QWidget):
     """Widget that displays an image and supports ROI selection, match overlays, zoom and pan."""
+
+    navigate = Signal(int)  # -1 = previous, +1 = next
 
     _HANDLE_SIZE = 8  # px, full side length of handle squares
     _HANDLE_NAMES = [
@@ -251,6 +253,12 @@ class ImageViewer(QWidget):
             self._space_held = True
             if not self._panning:
                 self.setCursor(Qt.OpenHandCursor)
+            return
+        if event.key() in (Qt.Key_Right, Qt.Key_Down):
+            self.navigate.emit(1)
+            return
+        if event.key() in (Qt.Key_Left, Qt.Key_Up):
+            self.navigate.emit(-1)
             return
         super().keyPressEvent(event)
 

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QWidget,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QDialog,
     QDoubleSpinBox,
@@ -39,18 +40,29 @@ class MainWindow(QMainWindow):
         self._matcher = TemplateMatcher()
         self._match_boxes = []
 
+        # Image stack state
+        self._stack_paths = []
+        self._stack_index = 0
+        self._stack_panel = None
+        self._stack_viewer = None
+        self._stack_scroll = None
+
         # Dual viewer with splitter
-        splitter = QSplitter(Qt.Horizontal)
+        self._splitter = QSplitter(Qt.Horizontal)
         left_panel, self._template_scroll, self._template_viewer = \
             self._create_viewer_panel("Template")
         right_panel, self._search_scroll, self._search_viewer = \
             self._create_viewer_panel("Search")
         self._template_viewer.set_roi_mode(True)
         self._search_viewer.set_roi_mode(False)
-        splitter.addWidget(left_panel)
-        splitter.addWidget(right_panel)
-        splitter.setSizes([600, 600])
-        self.setCentralWidget(splitter)
+        self._splitter.addWidget(left_panel)
+        self._splitter.addWidget(right_panel)
+        self._splitter.setSizes([600, 600])
+
+        # Central stacked widget (page 0 = template matching, page 1 = image stack)
+        self._central_stack = QStackedWidget()
+        self._central_stack.addWidget(self._splitter)
+        self.setCentralWidget(self._central_stack)
 
         # Menu bar (embedded in window, not native macOS menu)
         menubar = self.menuBar()
@@ -67,6 +79,18 @@ class MainWindow(QMainWindow):
         open_search_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
         open_search_action.triggered.connect(self._open_search_image)
         file_menu.addAction(open_search_action)
+
+        open_folder_action = QAction("Open Image &Folder...", self)
+        open_folder_action.setShortcut(QKeySequence("Ctrl+D"))
+        open_folder_action.triggered.connect(self._open_image_folder)
+        file_menu.addAction(open_folder_action)
+
+        file_menu.addSeparator()
+
+        self._back_to_template_action = QAction("&Back to Template Matching", self)
+        self._back_to_template_action.triggered.connect(self._switch_to_template_mode)
+        self._back_to_template_action.setEnabled(False)
+        file_menu.addAction(self._back_to_template_action)
 
         file_menu.addSeparator()
 
@@ -94,6 +118,7 @@ class MainWindow(QMainWindow):
         self.addToolBar(toolbar)
         toolbar.addAction(open_action)
         toolbar.addAction(open_search_action)
+        toolbar.addAction(open_folder_action)
         toolbar.addAction(save_tpl_action)
         toolbar.addAction(save_matches_action)
         toolbar.addSeparator()
@@ -268,3 +293,54 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Saved {len(self._match_boxes)} match image(s) to {folder}"
         )
+
+    def _open_image_folder(self):
+        folder = QFileDialog.getExistingDirectory(self, "Open Image Folder")
+        if not folder:
+            return
+        extensions = ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff")
+        paths = []
+        for ext in extensions:
+            paths.extend(glob.glob(os.path.join(folder, ext)))
+        paths.sort()
+        if not paths:
+            self.statusBar().showMessage("No images found in selected folder")
+            return
+        self._stack_paths = paths
+        self._stack_index = 0
+        if self._stack_panel is None:
+            self._stack_panel, self._stack_scroll, self._stack_viewer = \
+                self._create_viewer_panel("Stack")
+            self._stack_viewer.set_roi_mode(False)
+            self._stack_viewer.navigate.connect(self._navigate_stack)
+            self._central_stack.addWidget(self._stack_panel)
+        self._central_stack.setCurrentIndex(1)
+        self._back_to_template_action.setEnabled(True)
+        self._show_stack_image()
+        self._stack_viewer.setFocus()
+
+    def _switch_to_template_mode(self):
+        self._central_stack.setCurrentIndex(0)
+        self._back_to_template_action.setEnabled(False)
+
+    def _show_stack_image(self):
+        path = self._stack_paths[self._stack_index]
+        img = cv2.imread(path)
+        if img is None:
+            self.statusBar().showMessage(f"Failed to load {os.path.basename(path)}")
+            return
+        self._stack_viewer.set_image(cv_image_to_qpixmap(img))
+        total = len(self._stack_paths)
+        name = os.path.basename(path)
+        self.statusBar().showMessage(
+            f"Image {self._stack_index + 1}/{total} \u2014 {name}"
+        )
+
+    def _navigate_stack(self, direction):
+        """Handle arrow key navigation in stack mode. direction: -1 or +1."""
+        if self._central_stack.currentIndex() != 1 or not self._stack_paths:
+            return
+        new_index = self._stack_index + direction
+        if 0 <= new_index < len(self._stack_paths):
+            self._stack_index = new_index
+            self._show_stack_image()

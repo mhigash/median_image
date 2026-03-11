@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from image_viewer import ImageViewer
 from pixel_profile_dialog import PixelProfileDialog
 from matching_wizard import MatchingWizard
-from multiple_image_processing import make_median_image
+from multiple_image_processing import make_median_image, make_mean_image
 from template_matcher import TemplateMatcher, cv_image_to_qpixmap
 
 
@@ -128,6 +128,11 @@ class MainWindow(QMainWindow):
         median_action.triggered.connect(self._make_median_image)
         processing_menu.addAction(median_action)
 
+        mean_action = QAction("Make M&ean Image...", self)
+        mean_action.setShortcut(QKeySequence("Ctrl+E"))
+        mean_action.triggered.connect(self._make_mean_image)
+        processing_menu.addAction(mean_action)
+
         # Main toolbar (actions shared with menu)
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
@@ -142,6 +147,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(wizard_action)
         toolbar.addSeparator()
         toolbar.addAction(median_action)
+        toolbar.addAction(mean_action)
 
         # State for threshold (remembered across dialogs)
         self._threshold = 0.80
@@ -391,4 +397,13 @@ class MainWindow(QMainWindow):
                 "No image folder opened — open a folder first")
             return
         message = make_median_image(self, self._stack_paths)
+        self.statusBar().showMessage(message)
+
+    def _make_mean_image(self):
+        """Compute per-pixel mean across all stack images and save the result."""
+        if not self._stack_paths:
+            self.statusBar().showMessage(
+                "No image folder opened — open a folder first")
+            return
+        message = make_mean_image(self, self._stack_paths)
         self.statusBar().showMessage(message)

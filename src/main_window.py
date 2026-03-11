@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 
 from image_viewer import ImageViewer
 from pixel_profile_dialog import PixelProfileDialog
+from matching_wizard import MatchingWizard
 from template_matcher import TemplateMatcher, cv_image_to_qpixmap
 
 
@@ -114,6 +115,11 @@ class MainWindow(QMainWindow):
         run_action.triggered.connect(self._run_matching)
         matching_menu.addAction(run_action)
 
+        wizard_action = QAction("Matching &Wizard...", self)
+        wizard_action.setShortcut(QKeySequence("Ctrl+W"))
+        wizard_action.triggered.connect(self._open_matching_wizard)
+        matching_menu.addAction(wizard_action)
+
         # Main toolbar (actions shared with menu)
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
@@ -125,6 +131,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(save_matches_action)
         toolbar.addSeparator()
         toolbar.addAction(run_action)
+        toolbar.addAction(wizard_action)
 
         # State for threshold (remembered across dialogs)
         self._threshold = 0.80
@@ -297,6 +304,13 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Saved {len(self._match_boxes)} match image(s) to {folder}"
         )
+
+    def _open_matching_wizard(self):
+        wizard = MatchingWizard(self)
+        if wizard.exec() == QDialog.Accepted:
+            count = wizard.match_count
+            self.statusBar().showMessage(
+                f"Wizard complete — saved {count} match image(s)")
 
     def _open_image_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Open Image Folder")

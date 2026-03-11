@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from image_viewer import ImageViewer
 from pixel_profile_dialog import PixelProfileDialog
 from matching_wizard import MatchingWizard
+from multiple_image_processing import make_median_image
 from template_matcher import TemplateMatcher, cv_image_to_qpixmap
 
 
@@ -120,6 +121,13 @@ class MainWindow(QMainWindow):
         wizard_action.triggered.connect(self._open_matching_wizard)
         matching_menu.addAction(wizard_action)
 
+        processing_menu = menubar.addMenu("&Processing")
+
+        median_action = QAction("Make &Median Image...", self)
+        median_action.setShortcut(QKeySequence("Ctrl+M"))
+        median_action.triggered.connect(self._make_median_image)
+        processing_menu.addAction(median_action)
+
         # Main toolbar (actions shared with menu)
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
@@ -132,6 +140,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(run_action)
         toolbar.addAction(wizard_action)
+        toolbar.addSeparator()
+        toolbar.addAction(median_action)
 
         # State for threshold (remembered across dialogs)
         self._threshold = 0.80
@@ -373,3 +383,12 @@ class MainWindow(QMainWindow):
         self._profile_dialog.update_profile(point.x(), point.y(), self._stack_paths)
         self._profile_dialog.show()
         self._profile_dialog.raise_()
+
+    def _make_median_image(self):
+        """Compute per-pixel median across all stack images and save the result."""
+        if not self._stack_paths:
+            self.statusBar().showMessage(
+                "No image folder opened — open a folder first")
+            return
+        message = make_median_image(self, self._stack_paths)
+        self.statusBar().showMessage(message)

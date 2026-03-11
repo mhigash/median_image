@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from image_viewer import ImageViewer
+from pixel_profile_dialog import PixelProfileDialog
 from template_matcher import TemplateMatcher, cv_image_to_qpixmap
 
 
@@ -46,6 +47,7 @@ class MainWindow(QMainWindow):
         self._stack_panel = None
         self._stack_viewer = None
         self._stack_scroll = None
+        self._profile_dialog = None
 
         # Dual viewer with splitter
         self._splitter = QSplitter(Qt.Horizontal)
@@ -315,6 +317,7 @@ class MainWindow(QMainWindow):
                 self._create_viewer_panel("Stack")
             self._stack_viewer.set_roi_mode(False)
             self._stack_viewer.navigate.connect(self._navigate_stack)
+            self._stack_viewer.pixel_clicked.connect(self._on_stack_pixel_clicked)
             self._central_stack.addWidget(self._stack_panel)
         self._central_stack.setCurrentIndex(1)
         self._back_to_template_action.setEnabled(True)
@@ -346,3 +349,13 @@ class MainWindow(QMainWindow):
         if 0 <= new_index < len(self._stack_paths):
             self._stack_index = new_index
             self._show_stack_image()
+
+    def _on_stack_pixel_clicked(self, point):
+        """Show pixel profile dialog for the clicked pixel across all stack images."""
+        if not self._stack_paths:
+            return
+        if self._profile_dialog is None or not self._profile_dialog.isVisible():
+            self._profile_dialog = PixelProfileDialog(self)
+        self._profile_dialog.update_profile(point.x(), point.y(), self._stack_paths)
+        self._profile_dialog.show()
+        self._profile_dialog.raise_()

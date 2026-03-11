@@ -9,6 +9,7 @@ class ImageViewer(QWidget):
     """Widget that displays an image and supports ROI selection, match overlays, zoom and pan."""
 
     navigate = Signal(int)  # -1 = previous, +1 = next
+    pixel_clicked = Signal(QPoint)  # image-space coordinates
 
     _HANDLE_SIZE = 8  # px, full side length of handle squares
     _HANDLE_NAMES = [
@@ -378,7 +379,15 @@ class ImageViewer(QWidget):
                 self.setCursor(Qt.ArrowCursor)
             return
 
-        if event.button() != Qt.LeftButton or self._drag_mode is None:
+        if event.button() != Qt.LeftButton:
+            return
+
+        if self._drag_mode is None:
+            # Simple click with no drag — emit pixel_clicked
+            if not self._roi_mode and not self._pixmap.isNull():
+                img_pos = self._to_image(event.position().toPoint())
+                if self._pixmap.rect().contains(img_pos):
+                    self.pixel_clicked.emit(img_pos)
             return
 
         img_pos = self._to_image(event.position().toPoint())

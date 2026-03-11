@@ -2,7 +2,7 @@
 
 import cv2
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QMainWindow,
     QLabel,
@@ -48,25 +48,44 @@ class MainWindow(QMainWindow):
         splitter.setSizes([600, 600])
         self.setCentralWidget(splitter)
 
-        # Main toolbar
+        # Menu bar (embedded in window, not native macOS menu)
+        menubar = self.menuBar()
+        menubar.setNativeMenuBar(False)
+
+        file_menu = menubar.addMenu("&File")
+
+        open_action = QAction("Open &Template Image...", self)
+        open_action.setShortcut(QKeySequence("Ctrl+O"))
+        open_action.triggered.connect(self._open_image)
+        file_menu.addAction(open_action)
+
+        open_search_action = QAction("Open &Search Image...", self)
+        open_search_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
+        open_search_action.triggered.connect(self._open_search_image)
+        file_menu.addAction(open_search_action)
+
+        file_menu.addSeparator()
+
+        save_tpl_action = QAction("Save Template &As...", self)
+        save_tpl_action.setShortcut(QKeySequence("Ctrl+S"))
+        save_tpl_action.triggered.connect(self._save_template)
+        file_menu.addAction(save_tpl_action)
+
+        matching_menu = menubar.addMenu("&Matching")
+
+        run_action = QAction("&Run Matching...", self)
+        run_action.setShortcut(QKeySequence("Ctrl+R"))
+        run_action.triggered.connect(self._run_matching)
+        matching_menu.addAction(run_action)
+
+        # Main toolbar (actions shared with menu)
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
         self.addToolBar(toolbar)
-
-        open_action = QAction("Open Template Image", self)
-        open_action.triggered.connect(self._open_image)
         toolbar.addAction(open_action)
-
-        save_tpl_action = QAction("Save Template", self)
-        save_tpl_action.triggered.connect(self._save_template)
-        toolbar.addAction(save_tpl_action)
-
-        open_search_action = QAction("Open Search Image", self)
-        open_search_action.triggered.connect(self._open_search_image)
         toolbar.addAction(open_search_action)
-
-        run_action = QAction("Run Matching", self)
-        run_action.triggered.connect(self._run_matching)
+        toolbar.addAction(save_tpl_action)
+        toolbar.addSeparator()
         toolbar.addAction(run_action)
 
         # State for threshold (remembered across dialogs)

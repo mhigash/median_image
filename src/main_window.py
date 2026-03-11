@@ -1,5 +1,8 @@
 """MainWindow for the Template Matching application."""
 
+import glob
+import os
+
 import cv2
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
@@ -34,6 +37,7 @@ class MainWindow(QMainWindow):
         self._template = None  # Cropped template (BGR)
         self._search_image = None  # Search target image (BGR)
         self._matcher = TemplateMatcher()
+        self._match_boxes = []
 
         # Dual viewer with splitter
         splitter = QSplitter(Qt.Horizontal)
@@ -71,6 +75,12 @@ class MainWindow(QMainWindow):
         save_tpl_action.triggered.connect(self._save_template)
         file_menu.addAction(save_tpl_action)
 
+        file_menu.addSeparator()
+
+        save_matches_action = QAction("Save &Matches...", self)
+        save_matches_action.triggered.connect(self._save_matches)
+        file_menu.addAction(save_matches_action)
+
         matching_menu = menubar.addMenu("&Matching")
 
         run_action = QAction("&Run Matching...", self)
@@ -85,6 +95,7 @@ class MainWindow(QMainWindow):
         toolbar.addAction(open_action)
         toolbar.addAction(open_search_action)
         toolbar.addAction(save_tpl_action)
+        toolbar.addAction(save_matches_action)
         toolbar.addSeparator()
         toolbar.addAction(run_action)
 
@@ -226,7 +237,34 @@ class MainWindow(QMainWindow):
 
         self._threshold = spin.value()
         display, boxes = self._matcher.run(self._search_image, self._template, self._threshold)
+        self._match_boxes = boxes
 
         self._search_viewer.set_image(cv_image_to_qpixmap(display))
 
         self.statusBar().showMessage(f"Found {len(boxes)} match(es) at threshold {self._threshold:.2f}")
+
+    def _save_matches(self):
+        if self._search_image is None:
+            self.statusBar().showMessage("No search image loaded")
+            return
+        if not self._match_boxes:
+            self.statusBar().showMessage("No matches to save — run matching first")
+            return
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder")
+        if not folder:
+            return
+        # Find the highest existing match_NNN.png number in the folder
+        existing = glob.glob(os.path.join(folder, "match_[0-9][0-9][0-9].png"))
+        start = 0
+        for path in existing:
+            base = os.path.basename(path)
+            num = int(base[6:9])  # "match_NNN.png" -> NNN
+            if num > start:
+                start = num
+        for i, (x, y, w, h) in enumerate(self._match_boxes, start=start + 1):
+            crop = self._search_image[y : y + h, x : x + w].copy()
+            filename = os.path.join(folder, f"match_{i:03d}.png")
+            cv2.imwrite(filename, crop)
+        self.statusBar().showMessage(
+            f"Saved {len(self._match_boxes)} match image(s) to {folder}"
+        )

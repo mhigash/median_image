@@ -9,11 +9,14 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QFileDialog,
     QToolBar,
-    QDoubleSpinBox,
     QStatusBar,
     QWidget,
     QSplitter,
     QVBoxLayout,
+    QDialog,
+    QDoubleSpinBox,
+    QDialogButtonBox,
+    QFormLayout,
 )
 
 from image_viewer import ImageViewer
@@ -66,14 +69,8 @@ class MainWindow(QMainWindow):
         run_action.triggered.connect(self._run_matching)
         toolbar.addAction(run_action)
 
-        toolbar.addSeparator()
-        toolbar.addWidget(QLabel(" Threshold: "))
-        self._threshold_spin = QDoubleSpinBox()
-        self._threshold_spin.setRange(0.0, 1.0)
-        self._threshold_spin.setSingleStep(0.05)
-        self._threshold_spin.setValue(0.80)
-        self._threshold_spin.setDecimals(2)
-        toolbar.addWidget(self._threshold_spin)
+        # State for threshold (remembered across dialogs)
+        self._threshold = 0.80
 
         # Status bar
         self.setStatusBar(QStatusBar())
@@ -188,9 +185,29 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("No search image loaded")
             return
 
-        threshold = self._threshold_spin.value()
-        display, boxes = self._matcher.run(self._search_image, self._template, threshold)
+        # Show threshold dialog
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Run Matching")
+        layout = QFormLayout(dlg)
+
+        spin = QDoubleSpinBox()
+        spin.setRange(0.0, 1.0)
+        spin.setSingleStep(0.05)
+        spin.setValue(self._threshold)
+        spin.setDecimals(2)
+        layout.addRow("Threshold:", spin)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addRow(buttons)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+
+        self._threshold = spin.value()
+        display, boxes = self._matcher.run(self._search_image, self._template, self._threshold)
 
         self._search_viewer.set_image(cv_image_to_qpixmap(display))
 
-        self.statusBar().showMessage(f"Found {len(boxes)} match(es) at threshold {threshold:.2f}")
+        self.statusBar().showMessage(f"Found {len(boxes)} match(es) at threshold {self._threshold:.2f}")

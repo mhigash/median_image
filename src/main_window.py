@@ -189,6 +189,7 @@ class MainWindow(QMainWindow):
             return
         self._cv_image = img
         self._template_viewer.set_image(cv_image_to_qpixmap(img))
+        self._switch_to_template_mode()
         self.statusBar().showMessage("Image loaded — drag to select a template region")
 
     def _save_template(self):
@@ -223,6 +224,7 @@ class MainWindow(QMainWindow):
             return
         self._search_image = img
         self._search_viewer.set_image(cv_image_to_qpixmap(img))
+        self._switch_to_template_mode()
         self.statusBar().showMessage("Search image loaded — click Run Matching")
 
     def _run_matching(self):

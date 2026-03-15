@@ -1,105 +1,121 @@
-"""Processing operations on multiple images (image stacks)."""
+"""Processing operations on multiple images (image stacks).
+
+All functions are pure — no GUI dependencies.
+
+Progress is reported via an optional callback:
+    progress_cb(current: int, total: int, filename: str) -> bool
+Return False from the callback to request cancellation.
+"""
 
 import os
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QProgressDialog, QApplication, QFileDialog
 
 
-def _load_stack(parent, paths, title):
-    """Load images with a progress dialog.
+def load_stack(paths, progress_cb=None):
+    """Load images from paths into a list of numpy arrays.
+
+    Args:
+        paths: List of file paths.
+        progress_cb: Optional callable(current, total, filename) -> bool.
+                     Return False to cancel; returns None on cancellation.
 
     Returns:
-        (images, cancelled) where images is a list of numpy arrays
-        and cancelled is True if the user cancelled.
+        List of BGR numpy arrays with matching shape, or None if cancelled.
     """
-    n = len(paths)
-    progress = QProgressDialog("Loading images...", "Cancel", 0, n + 1, parent)
-    progress.setWindowTitle(title)
-    progress.setWindowModality(Qt.ApplicationModal)
-    progress.setMinimumDuration(0)
-    progress.setValue(0)
-
     images = []
     ref_shape = None
+    n = len(paths)
     for i, path in enumerate(paths):
-        if progress.wasCanceled():
-            progress.close()
-            return [], True
-        progress.setLabelText(
-            f"Loading image {i + 1}/{n}: {os.path.basename(path)}")
-        QApplication.processEvents()
-
+        if progress_cb is not None:
+            if not progress_cb(i, n, os.path.basename(path)):
+                return None
         img = cv2.imread(path)
         if img is None:
-            progress.setValue(i + 1)
             continue
         if ref_shape is None:
             ref_shape = img.shape
         if img.shape == ref_shape:
             images.append(img)
-        progress.setValue(i + 1)
-
-    progress.setValue(n + 1)
-    progress.close()
-    return images, False
+    return images
 
 
-def make_median_image(parent, paths):
-    """Compute per-pixel median across images and prompt the user to save.
+def make_median(images):
+    """Compute per-pixel median across images.
 
     Args:
-        parent: Parent widget for dialogs.
-        paths: List of image file paths.
+        images: List of BGR numpy arrays with the same shape.
 
     Returns:
-        A status message string describing the outcome.
+        Median image as uint8 numpy array.
     """
-    images, cancelled = _load_stack(parent, paths, "Making Median Image")
-    if cancelled:
-        return "Median image cancelled"
-    if not images:
-        return "No valid images to process"
-
     stack = np.array(images, dtype=np.uint8)
-    result = np.median(stack, axis=0).astype(np.uint8)
-
-    save_path, _ = QFileDialog.getSaveFileName(
-        parent, "Save Median Image", "median.png",
-        "Images (*.png *.jpg *.bmp)")
-    if not save_path:
-        return "Median image not saved"
-
-    cv2.imwrite(save_path, result)
-    return f"Median image saved — {len(images)} images, {save_path}"
+    return np.median(stack, axis=0).astype(np.uint8)
 
 
-def make_mean_image(parent, paths):
-    """Compute per-pixel mean across images and prompt the user to save.
+def make_mean(images):
+    """Compute per-pixel mean across images.
 
     Args:
-        parent: Parent widget for dialogs.
-        paths: List of image file paths.
+        images: List of BGR numpy arrays with the same shape.
 
     Returns:
-        A status message string describing the outcome.
+        Mean image as uint8 numpy array.
     """
-    images, cancelled = _load_stack(parent, paths, "Making Mean Image")
-    if cancelled:
-        return "Mean image cancelled"
-    if not images:
-        return "No valid images to process"
-
     stack = np.array(images, dtype=np.float32)
-    result = np.mean(stack, axis=0).astype(np.uint8)
+    return np.mean(stack, axis=0).astype(np.uint8)
 
-    save_path, _ = QFileDialog.getSaveFileName(
-        parent, "Save Mean Image", "mean.png",
-        "Images (*.png *.jpg *.bmp)")
-    if not save_path:
-        return "Mean image not saved"
 
-    cv2.imwrite(save_path, result)
-    return f"Mean image saved — {len(images)} images, {save_path}"
+def compute_anomaly_maps(images, method="mean", threshold=2.0, normalize=True,
+                         progress_cb=None):
+    """Compute per-pixel anomaly heatmaps for each image relative to the stack.
+
+    Args:
+        images: List of BGR numpy arrays with the same shape.
+        method: 'mean' for Z-score (mean/std), 'median' for MAD-based.
+        threshold: Number of σ that maps to mid-range (128) in the heatmap.
+                   Only used when normalize=True.
+        normalize: If True, divide by spread and scale by threshold so the
+                   heatmap spans the full colour range relative to σ.
+                   If False, use raw absolute difference |image − reference|
+                   clipped to 0–255, showing true pixel-value deviation.
+        progress_cb: Optional callable(current, total, filename) -> bool.
+
+    Returns:
+        List of BGR heatmap arrays (one per input image), or None if cancelled.
+    """
+    stack = np.array(images, dtype=np.float32)
+
+    if method == "mean":
+        ref = np.mean(stack, axis=0)
+        spread = np.std(stack, axis=0)
+    else:
+        ref = np.median(stack, axis=0)
+        # Scale MAD to be comparable to std for a normal distribution
+        spread = np.median(np.abs(stack - ref), axis=0) * 1.4826
+
+    n = len(images)
+    heatmaps = []
+    for i, img in enumerate(images):
+        if progress_cb is not None:
+            if not progress_cb(i, n, ""):
+                return None
+
+        diff = np.abs(img.astype(np.float32) - ref)
+
+        if normalize:
+            # Divide per-channel before collapsing, then scale by threshold
+            score = diff / (spread + 1e-6)
+            if score.ndim == 3:
+                score = score.max(axis=2)
+            score_norm = np.clip(score / (threshold * 2) * 255, 0, 255).astype(np.uint8)
+        else:
+            # Raw absolute pixel difference; collapse then clip to 0–255
+            if diff.ndim == 3:
+                diff = diff.max(axis=2)
+            score_norm = np.clip(diff, 0, 255).astype(np.uint8)
+
+        heatmaps.append(cv2.applyColorMap(score_norm, cv2.COLORMAP_JET))
+
+    return heatmaps

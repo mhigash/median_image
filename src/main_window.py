@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 from image_viewer import ImageViewer
 from pixel_profile_dialog import PixelProfileDialog
 from matching_wizard import MatchingWizard
-from multiple_image_processing import make_median_image, make_mean_image
+from processing_gui import make_median_image, make_mean_image, detect_anomalies
 from template_matcher import TemplateMatcher, cv_image_to_qpixmap
 
 
@@ -133,6 +133,11 @@ class MainWindow(QMainWindow):
         mean_action.triggered.connect(self._make_mean_image)
         processing_menu.addAction(mean_action)
 
+        anomaly_action = QAction("Detect &Anomalies...", self)
+        anomaly_action.setShortcut(QKeySequence("Ctrl+A"))
+        anomaly_action.triggered.connect(self._detect_anomalies)
+        processing_menu.addAction(anomaly_action)
+
         # Main toolbar (actions shared with menu)
         toolbar = QToolBar("Main")
         toolbar.setMovable(False)
@@ -148,6 +153,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(median_action)
         toolbar.addAction(mean_action)
+        toolbar.addAction(anomaly_action)
 
         # State for threshold (remembered across dialogs)
         self._threshold = 0.80
@@ -406,4 +412,13 @@ class MainWindow(QMainWindow):
                 "No image folder opened — open a folder first")
             return
         message = make_mean_image(self, self._stack_paths)
+        self.statusBar().showMessage(message)
+
+    def _detect_anomalies(self):
+        """Detect per-pixel anomalies across all stack images and save heatmaps."""
+        if not self._stack_paths:
+            self.statusBar().showMessage(
+                "No image folder opened — open a folder first")
+            return
+        message = detect_anomalies(self, self._stack_paths)
         self.statusBar().showMessage(message)

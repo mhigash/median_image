@@ -106,20 +106,58 @@ def compute_anomaly_maps(images, method="mean", threshold=2.0, normalize=True,
             if not progress_cb(i, n, ""):
                 return None
 
-        diff = np.abs(img.astype(np.float32) - ref)
+        signed = img.astype(np.float32) - ref   # signed difference (positive = brighter)
+        diff = np.abs(signed)
 
         if normalize:
-            # Divide per-channel before collapsing, then scale by threshold
-            score = diff / (spread + 1e-6)
-            if score.ndim == 3:
-                score = score.max(axis=2)
-            score_norm = np.clip(score / (threshold * 2) * 255, 0, 255).astype(np.uint8)
+            # Signed z-score per channel, then collapse to 2D using the channel
+            # with the largest absolute deviation to drive the direction.
+            signed_score = signed / (spread + 1e-6)
+            abs_score = diff / (spread + 1e-6)
+            if abs_score.ndim == 3:
+                # Pick the channel with max absolute z-score per pixel
+                dominant = np.argmax(abs_score, axis=2)
+                h, w = dominant.shape
+                row_idx = np.arange(h)[:, None]
+                col_idx = np.arange(w)[None, :]
+                abs_score = abs_score[row_idx, col_idx, dominant]
+                signed_score = signed_score[row_idx, col_idx, dominant]
+
+            # Directional masks:
+            #   brighter → yellow (pixel > ref by more than threshold σ)
+            #   darker   → blue   (pixel < ref by more than threshold σ)
+            #   within   → dimmed neutral
+            brighter = signed_score >  threshold
+            darker   = signed_score < -threshold
+            neutral  = ~(brighter | darker)
+            brighter3 = brighter[:, :, np.newaxis]
+            darker3   = darker[:, :,   np.newaxis]
+            neutral3  = neutral[:, :,  np.newaxis]
+
+            # Neutral: dimmed original
+            base = (img * 0.3).astype(np.uint8)
+
+            # Yellow overlay for brighter pixels (intensity proportional to excess)
+            excess_b = np.clip((signed_score - threshold) / threshold * 255, 0, 255).astype(np.uint8)
+            yellow_overlay = np.zeros_like(img, dtype=np.uint8)
+            yellow_overlay[..., 1] = excess_b            # green in BGR
+            yellow_overlay[..., 2] = excess_b            # red in BGR  → yellow
+            brighter_layer = cv2.addWeighted(img, 0.5, yellow_overlay, 0.5, 0)
+
+            # Blue overlay for darker pixels (intensity proportional to excess)
+            excess_d = np.clip((-signed_score - threshold) / threshold * 255, 0, 255).astype(np.uint8)
+            blue_overlay = np.zeros_like(img, dtype=np.uint8)
+            blue_overlay[..., 0] = excess_d              # blue in BGR
+            darker_layer = cv2.addWeighted(img, 0.5, blue_overlay, 0.5, 0)
+
+            result = np.where(brighter3, brighter_layer,
+                     np.where(darker3,   darker_layer, base))
+            heatmaps.append(result.astype(np.uint8))
         else:
             # Raw absolute pixel difference; collapse then clip to 0–255
             if diff.ndim == 3:
                 diff = diff.max(axis=2)
             score_norm = np.clip(diff, 0, 255).astype(np.uint8)
-
-        heatmaps.append(cv2.applyColorMap(score_norm, cv2.COLORMAP_JET))
+            heatmaps.append(cv2.applyColorMap(score_norm, cv2.COLORMAP_JET))
 
     return heatmaps

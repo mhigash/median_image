@@ -92,7 +92,11 @@ def compute_anomaly_maps(images, method="mean", threshold=2.0, normalize=True,
         spread = np.std(stack, axis=0)
     else:
         ref = np.median(stack, axis=0)
-        # Scale MAD to be comparable to std for a normal distribution
+        # MAD (Median Absolute Deviation) is a robust spread estimator immune to outliers.
+        # For a normal distribution, MAD = 0.6745 * sigma, because the 75th percentile
+        # of N(0,1) is Phi^{-1}(0.75) = 0.6745 — meaning 50% of values fall within
+        # ±0.6745 sigma of the median. Multiplying by 1/0.6745 = 1.4826 rescales MAD
+        # to match sigma, so anomaly z-scores are on the same scale as the mean/std path.
         spread = np.median(np.abs(stack - ref), axis=0) * 1.4826
 
     n = len(images)

@@ -128,7 +128,7 @@ class _AnomalyConfigDialog(QDialog):
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(0.5, 20.0)
         self._threshold_spin.setSingleStep(0.5)
-        self._threshold_spin.setValue(2.0)
+        self._threshold_spin.setValue(3.0)
         self._threshold_spin.setDecimals(1)
         self._threshold_spin.setSuffix("  σ")
         layout.addRow("Threshold:", self._threshold_spin)

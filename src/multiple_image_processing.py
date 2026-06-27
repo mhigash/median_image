@@ -67,7 +67,7 @@ def make_mean(images):
     return np.mean(stack, axis=0).astype(np.uint8)
 
 
-def compute_anomaly_maps(images, method="mean", threshold=2.0, normalize=True,
+def compute_anomaly_maps(images, method="mean", threshold=3.0, normalize=True,
                          progress_cb=None):
     """Compute per-pixel anomaly heatmaps for each image relative to the stack.
 
